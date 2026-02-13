@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Stream Player</title>
+    
+    <!-- Video.js CSS -->
+    <link href="https://vjs.zencdn.net/7.21.1/video-js.min.css" rel="stylesheet">
+    
+    <!-- HLS.js -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest/dist/hls.min.js"></script>
+    
+    <!-- DASH.js -->
+    <script src="https://cdn.dashjs.org/latest/dash.all.min.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        .video-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        #player {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Customização do Video.js */
+        .video-js {
+            background-color: #000;
+        }
+
+        .video-js .vjs-control-bar {
+            background-color: rgba(0, 0, 0, 0.7);
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+            height: 40px;
+        }
+
+        .video-js:hover .vjs-control-bar {
+            opacity: 1;
+        }
+
+        .video-js .vjs-big-play-button {
+            top: 50%;
+            left: 50%;
+            margin-top: -1.5em;
+            margin-left: -1.5em;
+            border-radius: 0.3em;
+            font-size: 3em;
+            display: none;
+        }
+
+        .video-js .vjs-progress-control {
+            position: absolute;
+            bottom: 40px;
+            width: 100%;
+            height: 5px;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+        }
+
+        .video-js:hover .vjs-progress-control {
+            opacity: 1;
+        }
+
+        .video-js .vjs-progress-holder {
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .video-js .vjs-play-progress {
+            background-color: #ff0000;
+            height: 100%;
+        }
+
+        .video-js .vjs-time-tooltip {
+            background-color: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 12px;
+            bottom: 20px;
+        }
+
+        .video-js .vjs-mouse-display {
+            background-color: rgba(0, 0, 0, 0.8);
+        }
+
+        /* Botões de controle */
+        .video-js .vjs-control {
+            color: #fff;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+        }
+
+        .video-js .vjs-control:hover {
+            color: #fff;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+        }
+
+        .video-js .vjs-button > .vjs-icon-placeholder {
+            line-height: 1.8;
+        }
+
+        .video-js .vjs-volume-panel {
+            margin-right: 10px;
+        }
+
+        .video-js .vjs-time-control {
+            color: #fff;
+            font-size: 14px;
+            min-width: 60px;
+        }
+
+        .video-js .vjs-fullscreen-control {
+            margin-right: 10px;
+        }
+
+        /* Indicador de live */
+        .live-indicator {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background-color: #e74c3c;
+            color: #fff;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+        }
+
+        .video-js:hover ~ .live-indicator {
+            opacity: 1;
+        }
+
+        .live-indicator::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            background-color: #fff;
+            border-radius: 50%;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        /* Indicador de latência */
+        .latency-indicator {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: #00ff00;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-family: 'Courier New', monospace;
+            z-index: 10;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+            display: none;
+        }
+
+        .video-js:hover ~ .latency-indicator {
+            opacity: 0.8;
+        }
+
+        /* Loading spinner */
+        .loading-spinner {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top: 3px solid #fff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            z-index: 5;
+            opacity: 0;
+            display: none;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: translate(-50%, -50%) rotate(0deg);
+            }
+            100% {
+                transform: translate(-50%, -50%) rotate(360deg);
+            }
+        }
+
+        .loading-spinner {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top: 3px solid #fff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            z-index: 5;
+            opacity: 0;
+            display: none;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: translate(-50%, -50%) rotate(0deg);
+            }
+            100% {
+                transform: translate(-50%, -50%) rotate(360deg);
+            }
+        }
+
+        .video-js.loading .loading-spinner {
+            display: block;
+            opacity: 1;
+        }
+
+        /* Painel de Configuração */
+        .config-panel {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: linear-gradient(135deg, #1e1e1e 0%, #2d2d2d 100%);
+            border: 2px solid #404040;
+            border-radius: 10px;
+            padding: 40px;
+            max-width: 500px;
+            width: 90%;
+            z-index: 100;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+            display: none;
+        }
+
+        .config-panel.active {
+            display: block;
+        }
+
+        .config-panel h1 {
+            color: #fff;
+            margin-bottom: 10px;
+            font-size: 24px;
+            text-align: center;
+        }
+
+        .config-panel p {
+            color: #aaa;
+            font-size: 14px;
+            text-align: center;
+            margin-bottom: 30px;
+            line-height: 1.5;
+        }
+
+        .config-panel label {
+            display: block;
+            color: #fff;
+            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .config-panel input {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 20px;
+            background-color: #404040;
+            border: 1px solid #505050;
+            border-radius: 5px;
+            color: #fff;
+            font-size: 14px;
+            font-family: 'Courier New', monospace;
+            box-sizing: border-box;
+            transition: border-color 0.3s;
+        }
+
+        .config-panel input:focus {
+            outline: none;
+            border-color: #ff0000;
+        }
+
+        .config-panel button {
+            width: 100%;
+            padding: 12px;
+            background-color: #e74c3c;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .config-panel button:hover {
+            background-color: #c0392b;
+        }
+
+        .config-panel .example {
+            background-color: #2a2a2a;
+            border-left: 3px solid #ff0000;
+            padding: 10px;
+            margin-top: 20px;
+            font-size: 12px;
+            color: #aaa;
+            font-family: 'Courier New', monospace;
+            border-radius: 3px;
+        }
+
+        .config-panel .example strong {
+            color: #00ff00;
+        }
+</head>
+<body>
+    <div class="video-container">
+        <video id="player" class="video-js vjs-default-skin" controls preload="auto">
+            <p class="vjs-no-js">Para usar este player de vídeo, favor ativar JavaScript, e considere atualizar para um navegador web que suporte <a href="https://videojs.com/html5-video-js/" target="_blank">HTML5 video</a></p>
+        </video>
+        <div class="live-indicator" id="liveIndicator">LIVE</div>
+        <div class="latency-indicator" id="latencyIndicator">Latência: --ms</div>
+        <div class="loading-spinner" id="loadingSpinner"></div>
+    </div>
+
+    <!-- Painel de Configuração -->
+    <div class="config-panel" id="configPanel">
+        <h1>🎥 Live Stream Player</h1>
+        <p>Insira a URL da sua transmissão ao vivo para começar</p>
+        
+        <label for="streamUrlInput">URL da Stream (HLS/DASH):</label>
+        <input 
+            type="url" 
+            id="streamUrlInput" 
+            placeholder="http://seu-servidor:8888/live/mystream.m3u8"
+            autocomplete="off"
+        >
+        
+        <button id="connectBtn">Conectar</button>
+        
+        <div class="example">
+            <strong>📌 Exemplos:</strong><br>
+            • HLS: http://192.168.1.100:8888/live/mystream.m3u8<br>
+            • DASH: http://192.168.1.100:8888/live/stream.mpd<br><br>
+            <strong>💡 Dica:</strong> Compartilhe o link:<br>
+            <span id="shareLink" style="color: #00ff00; cursor: pointer; word-break: break-all;"></span>
+        </div>
+    </div>
+
+    <!-- Video.js -->
+    <script src="https://vjs.zencdn.net/7.21.1/video.min.js"></script>
+
+    <script>
+        // ========================================
+        // CONFIGURAÇÕES PRINCIPAIS
+        // ========================================
+        
+        // Obtém a URL da stream dos parâmetros da URL
+        // Uso: http://seu-site.io/?url=http://ip-servidor:8888/mystream/index.m3u8
+        function getStreamURL() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const urlFromParams = urlParams.get('url');
+            
+            if (urlFromParams) {
+                console.log('Stream URL recebida via parâmetro:', urlFromParams);
+                hideConfigPanel();
+                return urlFromParams;
+            }
+            
+            // Se não houver URL, mostrar painel de configuração
+            showConfigPanel();
+            return null;
+        }
+        
+        let STREAM_URL = getStreamURL();
+
+        // ========================================
+        // PAINEL DE CONFIGURAÇÃO
+        // ========================================
+        
+        function showConfigPanel() {
+            document.getElementById('configPanel').classList.add('active');
+            updateShareLink();
+        }
+
+        function hideConfigPanel() {
+            document.getElementById('configPanel').classList.remove('active');
+        }
+
+        function updateShareLink() {
+            const baseUrl = window.location.origin + window.location.pathname;
+            const input = document.getElementById('streamUrlInput');
+            const shareLink = document.getElementById('shareLink');
+            
+            if (input.value) {
+                const fullUrl = `${baseUrl}?url=${encodeURIComponent(input.value)}`;
+                shareLink.textContent = fullUrl;
+                shareLink.title = 'Clique para copiar';
+                shareLink.style.cursor = 'pointer';
+                shareLink.onclick = function() {
+                    navigator.clipboard.writeText(fullUrl).then(() => {
+                        alert('Link copiado para a área de transferência!');
+                    }).catch(() => {
+                        console.error('Erro ao copiar');
+                    });
+                };
+            } else {
+                shareLink.textContent = 'Insira a URL acima para gerar o link...';
+                shareLink.style.cursor = 'default';
+                shareLink.onclick = null;
+            }
+        }
+
+        document.getElementById('streamUrlInput').addEventListener('input', updateShareLink);
+
+        document.getElementById('connectBtn').addEventListener('click', function() {
+            const url = document.getElementById('streamUrlInput').value;
+            
+            if (!url) {
+                alert('Por favor, insira a URL da stream');
+                return;
+            }
+            
+            if (!url.startsWith('http')) {
+                alert('A URL deve começar com http:// ou https://');
+                return;
+            }
+            
+            STREAM_URL = url;
+            hideConfigPanel();
+            loadStream();
+        });
+
+        // Enter para conectar
+        document.getElementById('streamUrlInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                document.getElementById('connectBtn').click();
+            }
+        });
+
+        // Detecta automaticamente o tipo de stream
+        function getStreamType(url) {
+            if (!url) return 'video/mp4';
+            if (url.endsWith('.m3u8')) return 'application/x-mpegURL';
+            if (url.endsWith('.mpd')) return 'application/dash+xml';
+            return 'video/mp4';
+        }
+
+        // ========================================
+        // INICIALIZAÇÃO DO VIDEO.JS
+        // ========================================
+        
+        const player = videojs('player', {
+            controls: true,
+            autoplay: 'muted',
+            preload: 'auto',
+            fluid: true,
+            fill: true,
+            responsive: true,
+            controlBar: {
+                children: [
+                    'playToggle',
+                    'progressControl',
+                    'volumePanel',
+                    'currentTimeDisplay',
+                    'timeDivider',
+                    'durationDisplay',
+                    'pictureInPictureToggle',
+                    'fullscreenToggle'
+                ]
+            },
+            html5: {
+                nativeControlCaptions: true,
+                nativeTextTracks: true
+            },
+            liveui: true,
+            liveTracker: {
+                trackingThreshold: 0,
+                liveTolerance: 15
+            }
+        });
+
+        // ========================================
+        // SUPORTE A HLS
+        // ========================================
+        
+        function setupHLS() {
+            if (Hls.isSupported()) {
+                const hls = new Hls({
+                    debug: false,
+                    enableWorker: true,
+                    lowLatencyMode: true,
+                    testBandwidth: false,
+                    progressive: false,
+                    backBufferLength: 90,
+                    maxBufferSize: 60000000,
+                    maxBufferLength: 30,
+                    liveBackBufferLength: 20,
+                    fragLoadPolicy: {
+                        default: {
+                            maxTimeToFirstByteMs: 8000,
+                            maxLoadTimeMs: 20000
+                        }
+                    }
+                });
+
+                hls.attachMedia(player.tech().el());
+                hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                    console.log('HLS manifest carregado com sucesso');
+                    updateLiveStatus(true);
+                });
+
+                hls.on(Hls.Events.ERROR, function(event, data) {
+                    console.error('Erro HLS:', data);
+                    if (data.fatal) {
+                        switch (data.type) {
+                            case Hls.ErrorTypes.NETWORK_ERROR:
+                                console.error('Erro de rede - tentando reconectar...');
+                                setTimeout(() => hls.startLoad(), 3000);
+                                break;
+                            case Hls.ErrorTypes.MEDIA_ERROR:
+                                console.error('Erro de mídia');
+                                hls.recoverMediaError();
+                                break;
+                            default:
+                                hls.destroy();
+                                break;
+                        }
+                    }
+                });
+
+                hls.loadSource(STREAM_URL);
+
+                // Calcular latência
+                setInterval(() => calculateLatency(hls), 5000);
+
+                window.hls = hls;
+            } else if (player.canPlayType('application/x-mpegURL')) {
+                player.src({
+                    src: STREAM_URL,
+                    type: 'application/x-mpegURL'
+                });
+            }
+        }
+
+        // ========================================
+        // SUPORTE A DASH
+        // ========================================
+        
+        function setupDASH() {
+            const videoElement = player.tech().el();
+            const dashPlayer = dashjs.MediaPlayer().create();
+
+            dashPlayer.initialize(videoElement, STREAM_URL, true);
+            dashPlayer.updateSettings({
+                streaming: {
+                    lowLatencyMode: true,
+                    bufferingTimeDefault: 8,
+                    bufferingTimeMax: 20,
+                    bufferingTimeMin: 4,
+                    stableBufferTime: 12
+                }
+            });
+
+            dashPlayer.attachView(videoElement);
+            dashPlayer.attachSource(STREAM_URL);
+
+            // Tratamento de erros
+            dashPlayer.on(dashjs.MediaPlayer.events.ERROR, function(error) {
+                console.error('Erro DASH:', error);
+            });
+
+            dashPlayer.on(dashjs.MediaPlayer.events.STREAM_INITIALIZED, function() {
+                console.log('Stream DASH inicializado com sucesso');
+                updateLiveStatus(true);
+            });
+
+            updateLiveStatus(true);
+            window.dashPlayer = dashPlayer;
+        }
+
+        // ========================================
+        // CARREGAMENTO DA STREAM
+        // ========================================
+        
+        function loadStream() {
+            if (!STREAM_URL) {
+                console.warn('Nenhuma URL de stream disponível');
+                showConfigPanel();
+                return;
+            }
+
+            const streamType = getStreamType(STREAM_URL);
+
+            if (streamType === 'application/x-mpegURL') {
+                setupHLS();
+            } else if (streamType === 'application/dash+xml') {
+                setupDASH();
+            } else {
+                player.src({
+                    src: STREAM_URL,
+                    type: streamType
+                });
+            }
+        }
+
+        // ========================================
+        // INDICADORES DE STATUS
+        // ========================================
+        
+        function updateLiveStatus(isLive) {
+            const liveIndicator = document.getElementById('liveIndicator');
+            if (isLive) {
+                liveIndicator.style.opacity = '1';
+            } else {
+                liveIndicator.style.opacity = '0';
+            }
+        }
+
+        function calculateLatency(hls) {
+            if (!hls || !hls.media) return;
+
+            const videoElement = hls.media;
+            const bufferLength = videoElement.buffered.length > 0 
+                ? videoElement.buffered.end(videoElement.buffered.length - 1) - videoElement.currentTime 
+                : 0;
+
+            const latencyMs = Math.round(bufferLength * 1000);
+            const latencyIndicator = document.getElementById('latencyIndicator');
+
+            if (latencyMs > 0) {
+                latencyIndicator.textContent = `Latência: ${latencyMs}ms`;
+                latencyIndicator.style.display = 'block';
+            }
+        }
+
+        // ========================================
+        // EVENT LISTENERS
+        // ========================================
+        
+        player.on('play', function() {
+            document.getElementById('loadingSpinner').style.opacity = '1';
+        });
+
+        player.on('playing', function() {
+            document.getElementById('loadingSpinner').style.opacity = '0';
+        });
+
+        player.on('waiting', function() {
+            document.getElementById('loadingSpinner').style.opacity = '1';
+        });
+
+        player.on('error', function(error) {
+            console.error('Erro no player:', player.error());
+            updateLiveStatus(false);
+        });
+
+        // ========================================
+        // FULLSCREEN AUTOMÁTICO (OPCIONAL)
+        // ========================================
+        
+        // Descomente para fazer fullscreen automático ao carregar
+        // player.ready(function() {
+        //     player.requestFullscreen();
+        // });
+
+        // ========================================
+        // PREVENIR SLEEP/SCREENSAVER
+        // ========================================
+        
+        document.addEventListener('mousemove', function() {
+            if (document.hidden) return;
+        });
+
+        // ========================================
+        // INICIAR
+        // ========================================
+        
+        player.ready(function() {
+            console.log('Player inicializado');
+            loadStream();
+        });
+
+        // Tentar reconectar periodicamente se houver erro
+        setInterval(function() {
+            if (player.error()) {
+                console.log('Tentando reconectar...');
+                loadStream();
+            }
+        }, 30000);
+    </script>
+</body>
+</html>
