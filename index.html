@@ -3,7 +3,483 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
     <title>Live Stream Player</title>
+    
+    <!-- Video.js CSS -->
+    <link href="https://vjs.zencdn.net/7.21.1/video-js.min.css" rel="stylesheet" />
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+
+        .video-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            background: #000;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .video-js {
+            background-color: #000;
+        }
+
+        .video-js .vjs-control-bar {
+            background-color: rgba(0, 0, 0, 0.7);
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+            height: 40px;
+        }
+
+        .video-js:hover .vjs-control-bar {
+            opacity: 1;
+        }
+
+        .video-js .vjs-big-play-button {
+            background-color: rgba(0, 0, 0, 0.5);
+            border-color: #fff;
+        }
+
+        .video-js .vjs-play-progress {
+            background-color: #e74c3c;
+        }
+
+        .live-badge {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background-color: #e74c3c;
+            color: #fff;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            z-index: 10;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+
+        .live-badge.active {
+            opacity: 1;
+        }
+
+        .live-badge::before {
+            content: '';
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background-color: #fff;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .config-modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: linear-gradient(135deg, #1e1e1e 0%, #2d2d2d 100%);
+            border: 2px solid #404040;
+            border-radius: 12px;
+            padding: 40px;
+            max-width: 500px;
+            width: 90%;
+            z-index: 1000;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.9);
+            display: none;
+        }
+
+        .config-modal.active {
+            display: block;
+        }
+
+        .config-modal h1 {
+            color: #fff;
+            margin-bottom: 15px;
+            font-size: 28px;
+            text-align: center;
+        }
+
+        .config-modal p {
+            color: #aaa;
+            font-size: 14px;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .config-modal label {
+            display: block;
+            color: #fff;
+            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .config-modal input {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 20px;
+            background-color: #404040;
+            border: 1px solid #505050;
+            border-radius: 6px;
+            color: #fff;
+            font-size: 14px;
+            font-family: 'Courier New', monospace;
+            box-sizing: border-box;
+        }
+
+        .config-modal input:focus {
+            outline: none;
+            border-color: #e74c3c;
+            background-color: #4a4a4a;
+        }
+
+        .config-modal button {
+            width: 100%;
+            padding: 12px;
+            background-color: #e74c3c;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .config-modal button:hover {
+            background-color: #c0392b;
+        }
+
+        .config-modal .hints {
+            background-color: #2a2a2a;
+            border-left: 3px solid #e74c3c;
+            padding: 12px;
+            margin-top: 20px;
+            font-size: 12px;
+            color: #aaa;
+            font-family: 'Courier New', monospace;
+        }
+
+        .loading-spinner {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(255, 255, 255, 0.2);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            z-index: 5;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        @keyframes spin {
+            to { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+
+        .loading-spinner.active {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="video-container">
+        <video id="player" class="video-js vjs-default-skin" controls playsinline muted></video>
+        <div class="live-badge" id="liveBadge"></div>
+        <div class="loading-spinner" id="loadingSpinner"></div>
+    </div>
+
+    <div class="config-modal" id="configModal">
+        <h1>🎥 Live Stream</h1>
+        <p>Insira a URL da sua transmissão ao vivo</p>
+        
+        <label for="urlInput">URL da Stream (HLS/DASH):</label>
+        <input 
+            type="url" 
+            id="urlInput" 
+            placeholder="https://seu-servidor:8888/mystream/index.m3u8"
+            autocomplete="off"
+        />
+        
+        <button id="connectBtn">Conectar</button>
+        
+        <div class="hints">
+            <strong>📌 Exemplos:</strong>
+            https://seu-servidor:8888/mystream/index.m3u8
+            <strong style="margin-top: 8px; display: block;">💡 Link:</strong>
+            <span id="shareLink" style="color: #00ff00; cursor: pointer;"></span>
+        </div>
+    </div>
+
+    <!-- Video.js Library -->
+    <script src="https://vjs.zencdn.net/7.21.1/video.min.js"></script>
+    
+    <!-- HLS.js -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest/dist/hls.min.js"></script>
+
+    <script>
+        'use strict';
+
+        let STREAM_URL = null;
+        let player = null;
+        let hlsInstance = null;
+
+        function getStreamType(url) {
+            if (!url) return null;
+            if (url.includes('.m3u8')) return 'application/x-mpegURL';
+            if (url.includes('.mpd')) return 'application/dash+xml';
+            return 'application/x-mpegURL';
+        }
+
+        function showConfigPanel() {
+            document.getElementById('configModal').classList.add('active');
+            updateShareLink();
+        }
+
+        function hideConfigPanel() {
+            document.getElementById('configModal').classList.remove('active');
+        }
+
+        function showLoadingSpinner() {
+            document.getElementById('loadingSpinner').classList.add('active');
+        }
+
+        function hideLoadingSpinner() {
+            document.getElementById('loadingSpinner').classList.remove('active');
+        }
+
+        function setLiveStatus(isLive) {
+            const badge = document.getElementById('liveBadge');
+            if (isLive) {
+                badge.classList.add('active');
+                badge.textContent = 'LIVE';
+            } else {
+                badge.classList.remove('active');
+            }
+        }
+
+        function updateShareLink() {
+            const input = document.getElementById('urlInput');
+            const baseUrl = window.location.origin + window.location.pathname;
+            const shareLink = document.getElementById('shareLink');
+            
+            if (input.value) {
+                const fullUrl = `${baseUrl}?url=${encodeURIComponent(input.value)}`;
+                shareLink.textContent = fullUrl;
+                shareLink.onclick = () => {
+                    navigator.clipboard.writeText(fullUrl).then(() => {
+                        alert('✅ Link copiado!');
+                    });
+                };
+            } else {
+                shareLink.textContent = 'Digite a URL...';
+            }
+        }
+
+        function getURLParam() {
+            const params = new URLSearchParams(window.location.search);
+            return params.get('url');
+        }
+
+        function initializePlayer() {
+            console.log('📺 Inicializando player...');
+
+            player = videojs('player', {
+                autoplay: 'muted',
+                controls: true,
+                preload: 'auto',
+                fluid: true,
+                fill: true,
+                responsive: true,
+                controlBar: {
+                    children: [
+                        'playToggle',
+                        'progressControl',
+                        'volumePanel',
+                        'currentTimeDisplay',
+                        'timeDivider',
+                        'durationDisplay',
+                        'pictureInPictureToggle',
+                        'fullscreenToggle'
+                    ]
+                }
+            });
+
+            player.on('play', () => {
+                console.log('▶️ Iniciado');
+                showLoadingSpinner();
+            });
+
+            player.on('playing', () => {
+                console.log('✅ Tocando');
+                hideLoadingSpinner();
+                setLiveStatus(true);
+            });
+
+            player.on('waiting', () => {
+                console.log('⏳ Aguardando...');
+                showLoadingSpinner();
+            });
+
+            player.on('error', () => {
+                const error = player.error();
+                console.error('❌ Erro:', error);
+                hideLoadingSpinner();
+                setLiveStatus(false);
+            });
+
+            console.log('✅ Player iniciado');
+        }
+
+        function loadHLSStream(url) {
+            console.log('🎬 Carregando HLS:', url);
+            showLoadingSpinner();
+
+            if (Hls.isSupported()) {
+                if (hlsInstance) {
+                    hlsInstance.destroy();
+                }
+
+                hlsInstance = new Hls({
+                    debug: false,
+                    enableWorker: true,
+                    lowLatencyMode: true,
+                    backBufferLength: 90,
+                    maxBufferSize: 60 * 1000 * 1000,
+                    maxBufferLength: 30,
+                    liveBackBufferLength: 20,
+                    testBandwidth: false,
+                    progressive: false
+                });
+
+                hlsInstance.attachMedia(player.tech_.el());
+
+                hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+                    console.log('📋 Manifest carregado');
+                    setLiveStatus(true);
+                    player.play();
+                });
+
+                hlsInstance.on(Hls.Events.ERROR, (event, data) => {
+                    if (data.fatal) {
+                        console.error('⚠️ Erro fatal:', data.details);
+                        
+                        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+                            console.log('🔄 Reconectando...');
+                            setTimeout(() => hlsInstance.startLoad(), 3000);
+                        }
+                    }
+                });
+
+                hlsInstance.loadSource(url);
+            } else {
+                console.log('Usando HLS nativo');
+                player.src({
+                    src: url,
+                    type: 'application/x-mpegURL'
+                });
+                player.play();
+            }
+        }
+
+        function loadStream(url) {
+            if (!url) {
+                console.error('❌ URL vazia');
+                showConfigPanel();
+                return;
+            }
+
+            console.log('🚀 Conectando:', url);
+            STREAM_URL = url;
+            hideConfigPanel();
+
+            const streamType = getStreamType(url);
+            console.log('Tipo:', streamType);
+
+            if (streamType === 'application/x-mpegURL') {
+                loadHLSStream(url);
+            } else {
+                player.src({
+                    src: url,
+                    type: streamType
+                });
+                player.play();
+            }
+        }
+
+        document.getElementById('connectBtn').addEventListener('click', () => {
+            const url = document.getElementById('urlInput').value.trim();
+            
+            if (!url) {
+                alert('⚠️ Insira uma URL');
+                return;
+            }
+
+            if (!url.startsWith('http')) {
+                alert('⚠️ URL deve começar com http:// ou https://');
+                return;
+            }
+
+            loadStream(url);
+        });
+
+        document.getElementById('urlInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                document.getElementById('connectBtn').click();
+            }
+        });
+
+        document.getElementById('urlInput').addEventListener('input', updateShareLink);
+
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('🎮 Iniciando...');
+            initializePlayer();
+
+            const paramUrl = getURLParam();
+            if (paramUrl) {
+                console.log('📌 URL nos parâmetros');
+                loadStream(paramUrl);
+            } else {
+                console.log('Mostrando painel');
+                showConfigPanel();
+            }
+        });
+
+        window.addEventListener('error', (e) => {
+            console.error('💥 Erro:', e.message);
+        });
+    </script>
+</body>
+</html>
     
     <!-- Video.js CSS -->
     <link href="https://vjs.zencdn.net/7.21.1/video-js.min.css" rel="stylesheet">
