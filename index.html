@@ -372,13 +372,26 @@
                 hlsInstance = new Hls({
                     debug: false,
                     enableWorker: true,
-                    lowLatencyMode: true,
-                    backBufferLength: 90,
-                    maxBufferSize: 60 * 1000 * 1000,
-                    maxBufferLength: 30,
-                    liveBackBufferLength: 20,
+                    lowLatencyMode: false,
+                    backBufferLength: 120,
+                    maxBufferSize: 100 * 1000 * 1000,
+                    maxBufferLength: 60,
+                    liveBackBufferLength: 30,
                     testBandwidth: false,
-                    progressive: false
+                    progressive: false,
+                    fragLoadingTimeOut: 30000,
+                    fragLoadingMaxRetry: 5,
+                    fragLoadingRetryDelay: 1000,
+                    levelswitchfragloading: true,
+                    manifestLoadingTimeOut: 30000,
+                    manifestLoadingMaxRetry: 5,
+                    manifestLoadingRetryDelay: 1000,
+                    playlistLoadingTimeOut: 30000,
+                    playlistLoadingMaxRetry: 5,
+                    playlistLoadingRetryDelay: 1000,
+                    reuseInitialPlaylist: true,
+                    autoStartLoad: true,
+                    startPosition: -1
                 });
 
                 hlsInstance.attachMedia(player.tech_.el());
@@ -386,16 +399,38 @@
                 hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
                     console.log('📋 Manifest carregado');
                     setLiveStatus(true);
-                    player.play();
+                    player.play().catch(e => console.log('Play error:', e));
+                });
+
+                hlsInstance.on(Hls.Events.LEVEL_UPDATED, () => {
+                    console.log('✅ Nível atualizado');
+                });
+
+                hlsInstance.on(Hls.Events.FRAG_LOADED, () => {
+                    console.log('📦 Fragmento carregado');
                 });
 
                 hlsInstance.on(Hls.Events.ERROR, (event, data) => {
+                    console.error('⚠️ Erro HLS:', data.type, data.details);
+                    
                     if (data.fatal) {
-                        console.error('⚠️ Erro fatal:', data.details);
-                        
-                        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-                            console.log('🔄 Reconectando...');
-                            setTimeout(() => hlsInstance.startLoad(), 3000);
+                        switch (data.type) {
+                            case Hls.ErrorTypes.NETWORK_ERROR:
+                                console.log('🔄 Erro de rede, reconectando...');
+                                setTimeout(() => {
+                                    if (hlsInstance) {
+                                        hlsInstance.startLoad();
+                                    }
+                                }, 3000);
+                                break;
+                            case Hls.ErrorTypes.MEDIA_ERROR:
+                                console.log('🔧 Recuperando erro de mídia...');
+                                hlsInstance.recoverMediaError();
+                                break;
+                            default:
+                                console.error('❌ Erro fatal, destruindo...');
+                                hlsInstance.destroy();
+                                break;
                         }
                     }
                 });
@@ -407,7 +442,7 @@
                     src: url,
                     type: 'application/x-mpegURL'
                 });
-                player.play();
+                player.play().catch(e => console.log('Play error:', e));
             }
         }
 
@@ -472,6 +507,29 @@
                 console.log('Mostrando painel');
                 showConfigPanel();
             }
+
+            // Verificar se está travado a cada 10 segundos
+            setInterval(() => {
+                if (!player) return;
+                
+                const currentTime = player.currentTime();
+                const buffered = player.buffered();
+                
+                if (currentTime > 0 && buffered.length > 0) {
+                    const lastBufferEnd = buffered.end(buffered.length - 1);
+                    const bufferAhead = lastBufferEnd - currentTime;
+                    
+                    console.log(`⏱️ Buffer: ${bufferAhead.toFixed(2)}s ahead`);
+                    
+                    // Se não há buffer à frente, tentar reiniciar
+                    if (bufferAhead < 1 && !player.paused()) {
+                        console.warn('⚠️ Buffer vazio! Tentando reconectar...');
+                        if (hlsInstance) {
+                            hlsInstance.startLoad();
+                        }
+                    }
+                }
+            }, 10000);
         });
 
         window.addEventListener('error', (e) => {
